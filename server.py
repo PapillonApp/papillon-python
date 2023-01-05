@@ -61,13 +61,33 @@ def get_client(token: str) -> tuple[str, pronotepy.Client|None]:
         client_dict = saved_clients[token]
         if time.time() - client_dict['last_interaction'] < client_timeout_threshold:
             client_dict['last_interaction'] = time.time()
-            return 'ok', client_dict['client']
+            client = client_dict['client']
+
+            return 'ok', client
         else:
             del saved_clients[token]
             print(len(saved_clients), 'valid tokens')
             return 'expired', None
     else:
         return 'notfound', None
+
+def get_trimesters(client: pronotepy.Client|None):
+    result_data = {'current_trimester': None, 'trimesters': []}
+    if client is None:
+        return result_data
+
+    for period in client.periods:
+        if period.name.startswith('Trimestre '):
+            result_data['trimesters'].append(period)
+
+            today = datetime.datetime.utcnow().date()
+            start = datetime.datetime(today.year, today.month, today.day)
+            today_end = start + datetime.timedelta(1)
+
+            if period.end > today_end and not result_data['current_trimester'] != None:
+                result_data['current_trimester'] = period
+
+    return result_data
 
 @hug.get('/infos')
 def infos():
@@ -295,7 +315,8 @@ def transformToNumber(value:str)->float|int:
 def grades(token, response):
     success, client = get_client(token)
     if success == 'ok':
-        allGrades = client.current_period.grades
+        trimesters= get_trimesters(client)
+        allGrades = trimesters['current_trimester'].grades
         gradesData = []
         for grade in allGrades:
             gradeData = {
